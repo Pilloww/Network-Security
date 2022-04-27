@@ -1,0 +1,145 @@
+/*
+ * To change this license header, choose License Headers in Project Properties.
+ * To change this template file, choose Tools | Templates
+ * and open the template in the editor.
+ */
+package coe817lab3;
+
+
+import java.io.*;
+import java.net.*;
+import java.security.Key;
+import java.security.KeyPair;
+import javax.crypto.*;
+
+
+public class ClientSide {
+    
+    public static void main(String[] args)
+    {
+        byte[]  cipherSent, cipherRecieved = null, 
+                decryptedOutput = null;
+        String id = "INITIATOR A";
+        String host = "localhost";
+        int port = 5001;
+        SecretKey secretKey = null;
+        String plainText;
+        int nonceSent, nonceRecieved, nonceTemp;
+        KeyPair keyPairA;
+        Key PU_b;
+        byte[] plainBytes;
+        
+        try {
+             System.out.println("CLIENT");
+            // Create key out of the string "NETWORK SECURITY".
+            // This uses the DESKeySpec to create a key from text.
+            keyPairA = KeyUtility.getKeyPair();
+            Key PU_a = keyPairA.getPublic();
+            byte[] PU_b_bytes = null;
+            Key PR_a = keyPairA.getPrivate();
+            // Generate Nonce.
+            nonceSent = KeyUtility.getNonce();
+            // notify client of attempt to connect
+            System.out.println("Connecting to " + host
+                    + " on port " + port);
+            // attempt the connection to socket.
+            Socket client = new Socket(host, port);
+//----- PASS PU_a to the HOST THIS WILL BE CHANGED TO A COMMON FILE-------------
+            DataOutputStream out =
+                    new DataOutputStream(client.getOutputStream());
+            
+            out.writeInt(PU_a.getEncoded().length);
+            out.write(PU_a.getEncoded());
+//------------------------------------------------------------------------------
+//----- RECIEVE PU_b from the HOST THIS WILL BE CHANGED TO A COMMON FILE-------------
+          DataInputStream in =
+                        new DataInputStream(client.getInputStream());
+            // Read in length of incoming bytes.
+            int duration = in.readInt();
+            // initialize byte array to contain incoming byte stream.
+            if(duration > 0) PU_b_bytes = new byte[duration];
+            in.read(PU_b_bytes, 0, duration);
+            
+//------------------------------------------------------------------------------
+            //report connection success to client.
+            System.out.println("Connected to "
+                    + client.getRemoteSocketAddress() +" success!" + "\n" );
+            // print ID message sent.
+            System.out.println("Sending client ID and nonce encrypted with B's"
+                    + " public key PU_b " + "to host: \n"
+                    + "Nonce Generated: " + nonceSent + "\n"
+                            + "Client Id: " + id + " \n");
+            // send ID to host.
+            plainText = nonceSent + "|" + id;
+            cipherSent = KeyUtility.getDESCipher(secretKey, 
+                    plainText.getBytes());
+            // send initial message.
+            KeyUtility.printMessageSent(plainText, cipherSent);
+            out.writeInt(cipherSent.length);
+            out.write(cipherSent);
+            
+//-------------RECIEVE CIPHER FROM HOST THAT CONTAINS Nonces---------------
+            //Recieve cipher from host.
+            // Read in length of incoming bytes.
+            duration = in.readInt();
+            // initialize byte array to contain incoming byte stream.
+            if(duration > 0) cipherRecieved = new byte[duration];
+            in.read(cipherRecieved, 0, duration);
+            
+            // print encrypted cipher message to standardout.
+            KeyUtility.printRecievedCipher(cipherRecieved);
+            // print decrypted message to standardout
+            decryptedOutput = KeyUtility.getPlainTextDES(secretKey, cipherRecieved);
+            KeyUtility.printRecievedDecryption(decryptedOutput);
+            
+//-----------Using recieved Nonce to send back for authorization ---------------
+            // parse incoming ciphertext for session key using regex.
+            plainText = new String(decryptedOutput);
+            String[] decryptedArray = plainText.split("\\|");
+
+            // get host's nonce from the decrpyted text.
+            nonceRecieved = Integer.parseInt(decryptedArray[1]);
+            // get authorization nonce;
+            nonceTemp = Integer.parseInt(decryptedArray[0]);
+            if(KeyUtility.confirmNonce(nonceSent, nonceTemp)){
+                // send to client the length of cipher in bytes, then the cipher
+                System.out.println("Send Nonce recieved from host for "
+                    + "idenitifaction encrypted using PU_b\n");
+                cipherSent = KeyUtility.getDESCipher(secretKey, 
+                        decryptedArray[1].getBytes());
+                KeyUtility.printMessageSent((String)decryptedArray[1], 
+                        cipherSent);
+                out.writeInt(cipherSent.length);
+                out.write(cipherSent);
+            }else { return;}     
+////-----------Using recieved Nonce to send back for authorization ------------
+//            // parse incoming ciphertext for session key using regex.
+//            String decryptedText = new String(decryptedOutput);
+//            String[] decryptedArray = decryptedText.split("\\|");
+//            
+//            // Create key out of the string recieved session key.
+//            // This uses the DESKeySpec to create a key from text.
+//            secretKey = KeyUtility.getKey((decryptedArray[0]+ " "));
+//    
+//            // get host's ID from the decrpyted text.
+//            encryptedOutput = decryptedArray[2].getBytes();
+//      
+//            encryptedOutput = KeyUtility.getDESCipher(secretKey, encryptedOutput);
+//            
+//            System.out.println("Extracted Session key: " + decryptedArray[0]);
+//            System.out.println("Extracted host ID: " + decryptedArray[2]);
+//            System.out.println("Sending Cipher ...\n");
+//            // send to client the length of cipher in bytes, then the cipher.
+//            out.writeInt(encryptedOutput.length);
+//            out.write(encryptedOutput);
+            
+            in.close();
+            out.close();
+            client.close();   
+         } catch(IOException ex) {
+            System.out.println("Error has occured.");
+            ex.printStackTrace();
+        } 
+    }
+}
+------------------------------------------------------
